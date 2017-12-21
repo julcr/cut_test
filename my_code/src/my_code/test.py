@@ -132,26 +132,20 @@ class MoveArm(object):
         test.relative_goal([0,-0.07,0],[0,0,0,1])
 
     def straight_chop(self):
-        max = -0.07
-        i =  0.00
-        while i > max:
-            i = i - 0.01
+        max_step = 6
+        for i in range(max_step):
             test.relative_goal([0,-0.02,0],[0,0,0,1])
             test.relative_goal([0,0.01,0], [0, 0, 0, 1])
 
     def cross_cut(self):
-        max = -0.06
-        i = 0.00
-        while i > max:
-            i = i - 0.01
+        max_step= 6
+        for i in range(max_step):
             test.relative_goal([0, -0.02, 0.05], [0, 0, 0, 1])
             test.relative_goal([0, 0.01, -0.05], [0, 0, 0, 1])
 
     def saw(self):
-        max = -0.06
-        i = 0.00
-        while i > max:
-            i = i - 0.01
+        max_step = 6
+        for i in range(max_step):
             test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
             test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
 
@@ -169,7 +163,7 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.straight_chop() # Aufruf der einfachen Schnittbewegung
+    test.cross_cut() # Aufruf der einfachen Schnittbewegung
     test.go_to_end_cutting()  # Aufruf der End-Pose
 
 
