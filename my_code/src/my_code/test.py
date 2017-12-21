@@ -129,13 +129,31 @@ class MoveArm(object):
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     def straight_cut(self):
-        print ("Begin straight cut")
-        goal = PoseStamped()
-        goal.header.frame_id = 'gripper_tool_frame'
-        goal.pose.position.y = -0.08
-        goal.pose.orientation.w = 1.0
-        self.send_cart_goal(goal)
+        test.relative_goal([0,-0.07,0],[0,0,0,1])
 
+    def straight_chop(self):
+        max = -0.07
+        i =  0.00
+        while i > max:
+            i = i - 0.01
+            test.relative_goal([0,-0.02,0],[0,0,0,1])
+            test.relative_goal([0,0.01,0], [0, 0, 0, 1])
+
+    def cross_cut(self):
+        max = -0.06
+        i = 0.00
+        while i > max:
+            i = i - 0.01
+            test.relative_goal([0, -0.02, 0.05], [0, 0, 0, 1])
+            test.relative_goal([0, 0.01, -0.05], [0, 0, 0, 1])
+
+    def saw(self):
+        max = -0.06
+        i = 0.00
+        while i > max:
+            i = i - 0.01
+            test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
+            test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
 
 if __name__ == '__main__':
 
@@ -143,15 +161,20 @@ if __name__ == '__main__':
                     anonymous=True)
     test = MoveArm()
 
-    print "Please make sure that your robot can move freely before proceeding!"
-    inp = raw_input("Continue? y/n: ")[0]
-    if (inp == 'y'):
-        print ("Start")
-        test.go_to_start_cutting() # Aufruf der Start-Pose
-        test.straight_cut() # Aufruf der einfachen Schnittbewegung
-        test.go_to_end_cutting()  # Aufruf der End-Pose
-        print ("End")
-    else:
-        print ("Halting program")
+    # test.relative_goal([0.,0,0.05],[0,0,0,1])
+
+    # print "Please make sure that your robot can move freely before proceeding!"
+    # inp = raw_input("Continue? y/n: ")[0]
+    # # if (inp == 'y'):
+    #     print ("Start")
+
+    test.go_to_start_cutting() # Aufruf der Start-Pose
+    test.straight_chop() # Aufruf der einfachen Schnittbewegung
+    test.go_to_end_cutting()  # Aufruf der End-Pose
+
+
+    #     print ("End")
+    # else:
+    #     print ("Halting program")
 
 
