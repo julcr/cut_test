@@ -7,10 +7,12 @@ import moveit_commander
 import moveit_msgs.msg
 import geometry_msgs.msg
 ## END_SUB_TUTORIAL
+import tf2_ros
 from actionlib import SimpleActionClient
 from geometry_msgs.msg import PoseStamped, Quaternion, Point
 from giskard_msgs.msg import ControllerListGoal, Controller, ControllerListAction
 from sensor_msgs.msg import JointState
+from numpy import pi
 
 from std_msgs.msg import String
 from tf.transformations import quaternion_about_axis, quaternion_from_euler
@@ -32,7 +34,10 @@ class MoveArm(object):
                             'wrist_2_joint',
                             'wrist_3_joint', ]
 
-    def send_cart_goal(self, goal_pose):
+        self.tfBuffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tfBuffer)
+
+    def send_cart_goal(self, goal_pose,translation_weight=1,rotation_weight=1):
         if self.enabled:
             goal = ControllerListGoal()
             goal.type = ControllerListGoal.STANDARD_CONTROLLER
@@ -48,7 +53,7 @@ class MoveArm(object):
             controller.p_gain = 3
             controller.enable_error_threshold = True
             controller.threshold_value = 0.05
-            controller.weight = 1.0
+            controller.weight = translation_weight
             goal.controllers.append(controller)
 
             # rotation
@@ -62,19 +67,31 @@ class MoveArm(object):
             controller.p_gain = 3
             controller.enable_error_threshold = True
             controller.threshold_value = 0.2
-            controller.weight = 1.0
+            controller.weight = rotation_weight
             goal.controllers.append(controller)
 
             self.client.send_goal(goal)
             result = self.client.wait_for_result(rospy.Duration(10))
             print('finished in 10s?: {}'.format(result))
 
-    def relative_goal(self, position, orientation):
+    def relative_goal(self, position, orientation,translation_weight=1,rotation_weight=1):
         p = PoseStamped()
         p.header.frame_id = self.tip
         p.pose.position = Point(*position)
         p.pose.orientation = Quaternion(*orientation)
-        self.send_cart_goal(p)
+        self.send_cart_goal(p,translation_weight,rotation_weight)
+
+    def move_tip_in_map(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den map Frame
+        trans = self.tfBuffer.lookup_transform('map', self.tip,
+                                               rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf map-Frame
+        p = PoseStamped()
+        p.header.frame_id = 'map'
+        p.pose.position = trans.transform.translation  # Uebernahme der soeben ermittelten Werte
+        p.pose.position.x += x  # Addition der Bewegung in x-Richtung
+        p.pose.position.y += y
+        p.pose.position.z += z
+        p.pose.orientation = trans.transform.rotation
+        test.send_cart_goal(p)
 
     def send_joint_goal(self, joint_state):
         if self.enabled:
@@ -136,7 +153,7 @@ class MoveArm(object):
         for i in range(max_step):
             test.relative_goal([0,-0.02,0],[0,0,0,1])
             test.relative_goal([0,0.01,0], [0, 0, 0, 1])
-
+    # tbd 3.1.
     def cross_cut(self):
         max_step= 6
         for i in range(max_step):
@@ -148,6 +165,27 @@ class MoveArm(object):
         for i in range(max_step):
             test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
             test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
+            test.relative_goal([0, 0.01, -0.05], [0, 0, 0, 1])
+
+    def roll_simple(self):
+        q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
+        test.relative_goal([0,0,0],q,translation_weight=100) # Erhohung der Gewichtung der Translation, damit die Spitze genauer in Position bleibt
+        test.move_tip_in_map(0,0,-0.08)
+        q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
+        test.relative_goal([0, 0, 0],q_1,translation_weight=100)
+
+    def roll_advanced(self):
+        q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
+        test.relative_goal([0, 0, 0], q, translation_weight=100)
+        test.move_tip_in_map(0, 0, -0.08)
+        test.move_tip_in_map(-0.05,0,0)
+        q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
+        test.relative_goal([0, 0, 0], q_1, translation_weight=100)
+
+
+
+
+
 
 if __name__ == '__main__':
 
@@ -163,8 +201,10 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.cross_cut() # Aufruf der einfachen Schnittbewegung
-    test.go_to_end_cutting()  # Aufruf der End-Pose
+    test.cross_cut()# Aufruf der einfachen Schnittbewegung
+    rospy.sleep(2)
+    test.go_to_start_cutting()  # Aufruf der Start-Pose
+    # test.go_to_end_cutting()  # Aufruf der End-Pose
 
 
     #     print ("End")
