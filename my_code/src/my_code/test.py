@@ -93,12 +93,12 @@ class MoveArm(object):
         p.pose.orientation = trans.transform.rotation
         test.send_cart_goal(p)
 
-    def distance2table(self): #nochmal checken lassen
+    def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
         offset_tip = 0.04 #Offset
-        global distance2table
         distance2table = trans.transform.translation.z - offset_tip
         print(distance2table)
+        return distance2table
 
     def send_joint_goal(self, joint_state):
         if self.enabled:
@@ -153,7 +153,7 @@ class MoveArm(object):
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     def straight_cut(self):
-        test.distance2table()
+        distance2table = test.distance2table()
         test.relative_goal([0,-distance2table,0],[0,0,0,1])
 
     def straight_chop(self):
