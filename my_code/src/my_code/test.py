@@ -81,17 +81,24 @@ class MoveArm(object):
         p.pose.orientation = Quaternion(*orientation)
         self.send_cart_goal(p,translation_weight,rotation_weight)
 
-    def move_tip_in_map(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den map Frame
-        trans = self.tfBuffer.lookup_transform('map', self.tip,
-                                               rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf map-Frame
+    def move_tip_in_amp(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
+        trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,
+                                               rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf 'arm_mounting_plate'-Frame
         p = PoseStamped()
-        p.header.frame_id = 'map'
+        p.header.frame_id = 'arm_mounting_plate'
         p.pose.position = trans.transform.translation  # Uebernahme der soeben ermittelten Werte
         p.pose.position.x += x  # Addition der Bewegung in x-Richtung
         p.pose.position.y += y
         p.pose.position.z += z
         p.pose.orientation = trans.transform.rotation
         test.send_cart_goal(p)
+
+    def distance2table(self): #nochmal checken lassen
+        trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
+        offset_tip = 0.04 #Offset
+        global distance2table
+        distance2table = trans.transform.translation.z - offset_tip
+        print(distance2table)
 
     def send_joint_goal(self, joint_state):
         if self.enabled:
@@ -146,45 +153,45 @@ class MoveArm(object):
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     def straight_cut(self):
-        test.relative_goal([0,-0.07,0],[0,0,0,1])
+        test.distance2table()
+        test.relative_goal([0,-distance2table,0],[0,0,0,1])
 
     def straight_chop(self):
         max_step = 6
         for i in range(max_step):
             test.relative_goal([0,-0.02,0],[0,0,0,1])
             test.relative_goal([0,0.01,0], [0, 0, 0, 1])
-    # tbd 3.1.
-    def cross_cut(self):
-        max_step= 6
-        for i in range(max_step):
-            test.relative_goal([0, -0.02, 0.05], [0, 0, 0, 1])
-            test.relative_goal([0, 0.01, -0.05], [0, 0, 0, 1])
 
     def saw(self):
         max_step = 6
         for i in range(max_step):
             test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
             test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
-            test.relative_goal([0, 0.01, -0.05], [0, 0, 0, 1])
 
     def roll_simple(self):
         q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
         test.relative_goal([0,0,0],q,translation_weight=100) # Erhohung der Gewichtung der Translation, damit die Spitze genauer in Position bleibt
-        test.move_tip_in_map(0,0,-0.08)
+        test.move_tip_in_amp(0, 0, -0.08)
         q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
         test.relative_goal([0, 0, 0],q_1,translation_weight=100)
 
     def roll_advanced(self):
         q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
         test.relative_goal([0, 0, 0], q, translation_weight=100)
-        test.move_tip_in_map(0, 0, -0.08)
-        test.move_tip_in_map(-0.05,0,0)
+        test.move_tip_in_amp(0, 0, -0.08)
+        test.move_tip_in_amp(-0.05, 0, 0)
         q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
         test.relative_goal([0, 0, 0], q_1, translation_weight=100)
 
-
-
-
+    def cross_cut(self):
+        max_step = 5
+        for i in range(max_step):
+            q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
+            test.relative_goal([0, 0, 0], q, translation_weight=100)
+            test.relative_goal([0, -0.01, 0.05], [0, 0, 0, 1])
+            q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
+            test.relative_goal([0, 0, 0], q_1,translation_weight=100)
+            test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
 
 if __name__ == '__main__':
@@ -201,7 +208,7 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.cross_cut()# Aufruf der einfachen Schnittbewegung
+    test.straight_cut()# Aufruf der einfachen Schnittbewegung
     rospy.sleep(2)
     test.go_to_start_cutting()  # Aufruf der Start-Pose
     # test.go_to_end_cutting()  # Aufruf der End-Pose
