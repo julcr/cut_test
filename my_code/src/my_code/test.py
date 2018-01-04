@@ -152,38 +152,59 @@ class MoveArm(object):
         print ("End Pose Approached")
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
-    def straight_cut(self):
-        distance2table = test.distance2table()
-        test.relative_goal([0,-distance2table,0],[0,0,0,1])
+    # def straight_cut(self):
+    #     distance2table = test.distance2table()
+    #     test.relative_goal([0,-distance2table,0],[0,0,0,1])
 
-    def straight_chop(self):
-        max_step = 6
-        for i in range(max_step):
-            test.relative_goal([0,-0.02,0],[0,0,0,1])
-            test.relative_goal([0,0.01,0], [0, 0, 0, 1])
+    # def straight_chop(self):
+    #     max_step = 6
+    #     for i in range(max_step):
+    #         test.relative_goal([0,-0.02,0],[0,0,0,1])
+    #         test.relative_goal([0,0.01,0], [0, 0, 0, 1])
 
-    def saw(self):
-        max_step = 6
-        for i in range(max_step):
-            test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
-            test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
+    # def saw(self):
+    #     max_step = 6
+    #     for i in range(max_step):
+    #         test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
+    #         test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
+    #
+    # def roll_simple(self):
+    #     q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
+    #     test.relative_goal([0,0,0],q,translation_weight=100) # Erhohung der Gewichtung der Translation, damit die Spitze genauer in Position bleibt
+    #     test.move_tip_in_amp(0, 0, -0.08)
+    #     q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
+    #     test.relative_goal([0, 0, 0],q_1,translation_weight=100)
+    #
+    # def roll_advanced(self):
+    #     q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
+    #     test.relative_goal([0, 0, 0], q, translation_weight=100)
+    #     test.move_tip_in_amp(0, 0, -0.08)
+    #     test.move_tip_in_amp(-0.05, 0, 0)
+    #     q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
+    #     test.relative_goal([0, 0, 0], q_1, translation_weight=100)
+    #
+    # def cross_cut(self):
+    #     max_step = 5
+    #     for i in range(max_step):
+    #         q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
+    #         test.relative_goal([0, 0, 0], q, translation_weight=100)
+    #         test.relative_goal([0, -0.01, 0.05], [0, 0, 0, 1])
+    #         q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
+    #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
+    #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
-    def roll_simple(self):
-        q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
-        test.relative_goal([0,0,0],q,translation_weight=100) # Erhohung der Gewichtung der Translation, damit die Spitze genauer in Position bleibt
-        test.move_tip_in_amp(0, 0, -0.08)
-        q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
-        test.relative_goal([0, 0, 0],q_1,translation_weight=100)
+    def straight_cut2(self):
+        d2t = test.distance2table()
+        while d2t > 0.001:
+           d2t = test.distance2table()
+           print("Distance to Table %s" % d2t)
+           test.move_tip_in_amp(0, 0, -0.01)
+           d2t = test.distance2table()
+           if d2t <= 0.01:
+                print("FINALE")
+                test.move_tip_in_amp(0, 0, -d2t)
 
-    def roll_advanced(self):
-        q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
-        test.relative_goal([0, 0, 0], q, translation_weight=100)
-        test.move_tip_in_amp(0, 0, -0.08)
-        test.move_tip_in_amp(-0.05, 0, 0)
-        q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
-        test.relative_goal([0, 0, 0], q_1, translation_weight=100)
-
-    def cross_cut(self):
+    def cross_cut2(self):
         max_step = 5
         for i in range(max_step):
             q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
@@ -208,7 +229,7 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.straight_cut()# Aufruf der einfachen Schnittbewegung
+    test.saw2()# Aufruf der einfachen Schnittbewegung
     rospy.sleep(2)
     test.go_to_start_cutting()  # Aufruf der Start-Pose
     # test.go_to_end_cutting()  # Aufruf der End-Pose
