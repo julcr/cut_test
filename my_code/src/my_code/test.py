@@ -13,7 +13,7 @@ from geometry_msgs.msg import PoseStamped, Quaternion, Point, WrenchStamped
 from giskard_msgs.msg import ControllerListGoal, Controller, ControllerListAction
 from sensor_msgs.msg import JointState
 from numpy import pi
-
+from math import sqrt
 from std_msgs.msg import String
 from tf.transformations import quaternion_about_axis, quaternion_from_euler
 
@@ -36,6 +36,10 @@ class MoveArm(object):
 
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
+
+
+        # This declares the subscription to the "/kms40/wrench_zeroed" topic which is of type WrenchStamped.
+        # Whenn new messages are recieved, ft_callback is invoked.
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
 
 
@@ -153,17 +157,19 @@ class MoveArm(object):
         self.send_joint_goal(goal_joint_state)
         print ("End Pose Approached")
 
-    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
-    def straight_cut(self):
-        distance2table = test.distance2table()
-        test.relative_goal([0,-distance2table,0],[0,0,0,1])
 
+
+    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
+    # def straight_cut(self):
+    #     d2t = test.distance2table()
+    #     test.relative_goal([0,-d2t,0],[0,0,0,1])
+    #
     # def straight_chop(self):
     #     max_step = 6
     #     for i in range(max_step):
     #         test.relative_goal([0,-0.02,0],[0,0,0,1])
     #         test.relative_goal([0,0.01,0], [0, 0, 0, 1])
-
+    #
     # def saw(self):
     #     max_step = 6
     #     for i in range(max_step):
@@ -195,6 +201,11 @@ class MoveArm(object):
     #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
     #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
+    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
+    # def straight_cut(self):
+    #     d2t = test.distance2table()
+    #     test.relative_goal([0,-d2t,0],[0,0,0,1])
+
     def straight_cut2(self):
         d2t = test.distance2table()
         while d2t > 0:
@@ -206,8 +217,10 @@ class MoveArm(object):
                 test.move_tip_in_amp(0, 0, -d2t)
                 d2t = 0
 
+
+
     def cross_cut2(self):
-        max_step = 5
+        d2t = test.distance2table()
         for i in range(max_step):
             q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
             test.relative_goal([0, 0, 0], q, translation_weight=100)
@@ -218,8 +231,9 @@ class MoveArm(object):
 
     def ft_callback(self,data):
         pass
-        # print(data)
-
+        ft = data.wrench.force.x*data.wrench.force.y*data.wrench.force.z
+        self.ft = sqrt(abs(ft))
+        print(ft)
 
 if __name__ == '__main__':
 
@@ -247,4 +261,5 @@ if __name__ == '__main__':
     # else:
     #     print ("Halting program")
 
+    # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
