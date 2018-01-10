@@ -9,7 +9,7 @@ import geometry_msgs.msg
 ## END_SUB_TUTORIAL
 import tf2_ros
 from actionlib import SimpleActionClient
-from geometry_msgs.msg import PoseStamped, Quaternion, Point
+from geometry_msgs.msg import PoseStamped, Quaternion, Point, WrenchStamped
 from giskard_msgs.msg import ControllerListGoal, Controller, ControllerListAction
 from sensor_msgs.msg import JointState
 from numpy import pi
@@ -36,6 +36,8 @@ class MoveArm(object):
 
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
+        self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
+
 
     def send_cart_goal(self, goal_pose,translation_weight=1,rotation_weight=1):
         if self.enabled:
@@ -95,7 +97,7 @@ class MoveArm(object):
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.04 #Offset
+        offset_tip = 0.07 #Offset
         distance2table = trans.transform.translation.z - offset_tip
         print(distance2table)
         return distance2table
@@ -151,10 +153,10 @@ class MoveArm(object):
         self.send_joint_goal(goal_joint_state)
         print ("End Pose Approached")
 
-    # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
-    # def straight_cut(self):
-    #     distance2table = test.distance2table()
-    #     test.relative_goal([0,-distance2table,0],[0,0,0,1])
+    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
+    def straight_cut(self):
+        distance2table = test.distance2table()
+        test.relative_goal([0,-distance2table,0],[0,0,0,1])
 
     # def straight_chop(self):
     #     max_step = 6
@@ -195,14 +197,14 @@ class MoveArm(object):
 
     def straight_cut2(self):
         d2t = test.distance2table()
-        while d2t > 0.001:
+        while d2t > 0:
            d2t = test.distance2table()
            print("Distance to Table %s" % d2t)
            test.move_tip_in_amp(0, 0, -0.01)
            d2t = test.distance2table()
            if d2t <= 0.01:
-                print("FINALE")
                 test.move_tip_in_amp(0, 0, -d2t)
+                d2t = 0
 
     def cross_cut2(self):
         max_step = 5
@@ -214,11 +216,16 @@ class MoveArm(object):
             test.relative_goal([0, 0, 0], q_1,translation_weight=100)
             test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
+    def ft_callback(self,data):
+        pass
+        # print(data)
+
 
 if __name__ == '__main__':
 
     rospy.init_node('move_group_python_interface_test',
                     anonymous=True)
+
     test = MoveArm()
 
     # test.relative_goal([0.,0,0.05],[0,0,0,1])
@@ -229,9 +236,10 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.saw2()# Aufruf der einfachen Schnittbewegung
+    test.straight_cut2()# Aufruf der einfachen Schnittbewegung
     rospy.sleep(2)
     test.go_to_start_cutting()  # Aufruf der Start-Pose
+
     # test.go_to_end_cutting()  # Aufruf der End-Pose
 
 
@@ -239,4 +247,4 @@ if __name__ == '__main__':
     # else:
     #     print ("Halting program")
 
-
+    rospy.spin()
