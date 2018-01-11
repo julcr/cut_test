@@ -205,19 +205,19 @@ class MoveArm(object):
     #     d2t = test.distance2table()
     #     test.relative_goal([0,-d2t,0],[0,0,0,1])
     #
-    def straight_cut3(self):
-        d2t = test.distance2table()
-        while d2t > 0:
-           d2t = test.distance2table()
-           #select down
-           down = 0.01
-           print("Distance to Table %s" % d2t)
-           test.move_tip_in_amp(0, 0, -down)
-           d2t = test.distance2table()
-           if d2t <= down:
-                test.move_tip_in_amp(0, 0, -d2t)
-                print("Distance to Table %s" % d2t)
-                return
+    # def straight_cut3(self):
+    #     d2t = test.distance2table()
+    #     while d2t > 0:
+    #        d2t = test.distance2table()
+    #        #select down
+    #        down = 0.01
+    #        print("Distance to Table %s" % d2t)
+    #        test.move_tip_in_amp(0, 0, -down)
+    #        d2t = test.distance2table()
+    #        if d2t <= down:
+    #             test.move_tip_in_amp(0, 0, -d2t)
+    #             print("Distance to Table %s" % d2t)
+    #             return
 
 
     # def cross_cut2(self):
@@ -234,10 +234,8 @@ class MoveArm(object):
     def master_cut(self):
         d2t = test.distance2table()
         while d2t > 0:
-            down = 0
-            side = 0
             # call calculation function
-            down, side, final = test.calc_move(down,side)
+            down, side, final = test.calc_move()
             # exec move(s). second move primarily to return to initial position.
             test.move_tip_in_amp(side, 0, -down)
             test.move_tip_in_amp(-side, 0, 0)
@@ -247,28 +245,42 @@ class MoveArm(object):
                 print("Final Distance to Table %s" % d2t)
                 return
 
-    def calc_move(self,down,side):
-        # init values
-
+    def calc_move(self):
         # Get values for computation
         final = False
         ft_threshold = 3
         max_ft = 10
-        cur_ft = 2
+        cur_ft = 5
         d2t = test.distance2table()
         print("Distance to Table %s" % d2t)
         # If FT value is below a threshold, no further computation needed
         if cur_ft < ft_threshold:
             down = 0.01
             side = 0
+            # If current step size is smaller than the distance to the table,
+            # the next step is set to the remaining distance to avoid collision
+            # and final is set to true.
             if d2t <= down:
                 down = d2t
                 final = True
+        else:
+            # Calculation of movement, if the value from the ft-sensor exceeds the threshold
+            # the higher the ft, the lower the step size on z-axis
+            # movement on x axis is not taken into calculation
+            down = (1-(float(cur_ft)/max_ft))*0.01
+            if cur_ft >= max_ft:
+                down = 0.001
+            if d2t <= down:
+                down = d2t
+                final = True
+            print("Down %s" % down)
+            side = 0.05
 
         return (down,side,final)
 
     def ft_callback(self,data):
         pass
+        # calculate length of ft euclidean vector
         ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
         self.ft = sqrt(ft)
         print(ft)
