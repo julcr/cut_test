@@ -101,9 +101,8 @@ class MoveArm(object):
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.07 #Offset
+        offset_tip = 0.05 #Offset
         distance2table = trans.transform.translation.z - offset_tip
-        print(distance2table)
         return distance2table
 
     def send_joint_goal(self, joint_state):
@@ -205,34 +204,73 @@ class MoveArm(object):
     # def straight_cut(self):
     #     d2t = test.distance2table()
     #     test.relative_goal([0,-d2t,0],[0,0,0,1])
-
-    def straight_cut2(self):
+    #
+    def straight_cut3(self):
         d2t = test.distance2table()
         while d2t > 0:
            d2t = test.distance2table()
+           #select down
+           down = 0.01
            print("Distance to Table %s" % d2t)
-           test.move_tip_in_amp(0, 0, -0.01)
+           test.move_tip_in_amp(0, 0, -down)
            d2t = test.distance2table()
-           if d2t <= 0.01:
+           if d2t <= down:
                 test.move_tip_in_amp(0, 0, -d2t)
-                d2t = 0
+                print("Distance to Table %s" % d2t)
+                return
 
 
+    # def cross_cut2(self):
+    #     d2t = test.distance2table()
+    #     max_step = 5
+    #     for i in range(max_step):
+    #         q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
+    #         test.relative_goal([0, 0, 0], q, translation_weight=100)
+    #         test.relative_goal([0, -0.01, 0.05], [0, 0, 0, 1])
+    #         q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
+    #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
+    #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
-    def cross_cut2(self):
+    def master_cut(self):
         d2t = test.distance2table()
-        for i in range(max_step):
-            q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
-            test.relative_goal([0, 0, 0], q, translation_weight=100)
-            test.relative_goal([0, -0.01, 0.05], [0, 0, 0, 1])
-            q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
-            test.relative_goal([0, 0, 0], q_1,translation_weight=100)
-            test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
+        while d2t > 0:
+            down = 0
+            side = 0
+            # call calculation function
+            down, side, final = test.calc_move(down,side)
+            # exec move(s). second move primarily to return to initial position.
+            test.move_tip_in_amp(side, 0, -down)
+            test.move_tip_in_amp(-side, 0, 0)
+            # If blade has made it's final move (as calculated in calc_move), function is exited
+            if final == True:
+                d2t = test.distance2table()
+                print("Final Distance to Table %s" % d2t)
+                return
+
+    def calc_move(self,down,side):
+        # init values
+
+        # Get values for computation
+        final = False
+        ft_threshold = 3
+        max_ft = 10
+        cur_ft = 2
+        d2t = test.distance2table()
+        print("Distance to Table %s" % d2t)
+        # If FT value is below a threshold, no further computation needed
+        if cur_ft < ft_threshold:
+            down = 0.01
+            side = 0
+            if d2t <= down:
+                down = d2t
+                final = True
+
+        return (down,side,final)
 
     def ft_callback(self,data):
         pass
-        ft = data.wrench.force.x*data.wrench.force.y*data.wrench.force.z
-        self.ft = sqrt(abs(ft))
+        ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
+        self.ft = sqrt(ft)
         print(ft)
 
 if __name__ == '__main__':
@@ -250,7 +288,7 @@ if __name__ == '__main__':
     #     print ("Start")
 
     test.go_to_start_cutting() # Aufruf der Start-Pose
-    test.straight_cut2()# Aufruf der einfachen Schnittbewegung
+    test.master_cut()# Aufruf der Schnittbewegung
     rospy.sleep(2)
     test.go_to_start_cutting()  # Aufruf der Start-Pose
 
@@ -262,4 +300,4 @@ if __name__ == '__main__':
     #     print ("Halting program")
 
     # spin() simply keeps python from exiting until this node is stopped
-    rospy.spin()
+    # rospy.spin()
