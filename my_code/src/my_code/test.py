@@ -101,7 +101,7 @@ class MoveArm(object):
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.05 #Offset
+        offset_tip = 0.07 #Offset in cm
         distance2table = trans.transform.translation.z - offset_tip
         return distance2table
 
@@ -129,16 +129,29 @@ class MoveArm(object):
             print('finished in 10s?: {}'.format(result))
 
     # Definition der Start Pose
-    def go_to_start_cutting(self):
+    # def go_to_start_cutting(self):
+    #     print ("Approach Start Pose")
+    #     goal_joint_state = JointState()
+    #     goal_joint_state.name = self.joint_names
+    #     goal_joint_state.position = [-(1.5708+0.7854),
+    #                                  -1.668,
+    #                                  -(1.5708+0.7854),
+    #                                  -2.26,
+    #                                  -1.5708,
+    #                                  1.5708]
+    #     self.send_joint_goal(goal_joint_state)
+    #     print ("Start Pose Approached")
+
+    def go_to_home(self):
         print ("Approach Start Pose")
         goal_joint_state = JointState()
         goal_joint_state.name = self.joint_names
-        goal_joint_state.position = [-(1.5708+0.7854),
-                                     -1.668,
-                                     -(1.5708+0.7854),
-                                     -2.26,
-                                     -1.5708,
-                                     1.5708]
+        goal_joint_state.position = [-2.3561944901923,
+                                     -1.7453292519943,
+                                     -1.3962634015955,
+                                     -1.5707963267949,
+                                     1.5707963267949,
+                                     1.5707963267949]
         self.send_joint_goal(goal_joint_state)
         print ("Start Pose Approached")
 
@@ -250,7 +263,7 @@ class MoveArm(object):
         final = False
         ft_threshold = 3
         max_ft = 10
-        cur_ft = 5
+        cur_ft = 2
         d2t = test.distance2table()
         print("Distance to Table %s" % d2t)
         # If FT value is below a threshold, no further computation needed
@@ -283,7 +296,7 @@ class MoveArm(object):
         # calculate length of ft euclidean vector
         ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
         self.ft = sqrt(ft)
-        print(ft)
+        # print(ft)
 
 if __name__ == '__main__':
 
@@ -299,10 +312,11 @@ if __name__ == '__main__':
     # # if (inp == 'y'):
     #     print ("Start")
 
-    test.go_to_start_cutting() # Aufruf der Start-Pose
+    test.go_to_home() # Aufruf der Start-Pose
+    test.move_tip_in_amp(0,0,-0.10)
     test.master_cut()# Aufruf der Schnittbewegung
     rospy.sleep(2)
-    test.go_to_start_cutting()  # Aufruf der Start-Pose
+    test.go_to_home()  # Aufruf der Start-Pose
 
     # test.go_to_end_cutting()  # Aufruf der End-Pose
 
