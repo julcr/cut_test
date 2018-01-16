@@ -3,8 +3,6 @@
 import sys
 import copy
 import rospy
-import moveit_commander
-import moveit_msgs.msg
 import geometry_msgs.msg
 ## END_SUB_TUTORIAL
 import tf2_ros
@@ -39,7 +37,7 @@ class MoveArm(object):
 
 
         # This declares the subscription to the "/kms40/wrench_zeroed" topic which is of type WrenchStamped.
-        # Whenn new messages are recieved, ft_callback is invoked.
+        # When new messages are recieved, ft_callback is invoked.
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
 
 
@@ -87,7 +85,7 @@ class MoveArm(object):
         p.pose.orientation = Quaternion(*orientation)
         self.send_cart_goal(p,translation_weight,rotation_weight)
 
-    def move_tip_in_amp(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
+    def move_tip_in_amp(self, x, y, z, translation_weight=1,rotation_weight=1):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,
                                                rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf 'arm_mounting_plate'-Frame
         p = PoseStamped()
@@ -97,11 +95,11 @@ class MoveArm(object):
         p.pose.position.y += y
         p.pose.position.z += z
         p.pose.orientation = trans.transform.rotation
-        test.send_cart_goal(p)
+        test.send_cart_goal(p,translation_weight,rotation_weight)
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.07 #Offset in cm
+        offset_tip = 0.05 #Offset in cm
         distance2table = trans.transform.translation.z - offset_tip
         return distance2table
 
@@ -155,19 +153,19 @@ class MoveArm(object):
         self.send_joint_goal(goal_joint_state)
         print ("Start Pose Approached")
 
-    # Definition der End Pose
-    def go_to_end_cutting(self):
-        print ("Approach End Pose")
-        goal_joint_state = JointState()
-        goal_joint_state.name = self.joint_names
-        goal_joint_state.position = [-(1.5708+0.7854),
-                                     -0.7854,
-                                     -2.8,
-                                     -0.1,
-                                     -1.5708,
-                                     1.5708]
-        self.send_joint_goal(goal_joint_state)
-        print ("End Pose Approached")
+    # # Definition der End Pose
+    # def go_to_end_cutting(self):
+    #     print ("Approach End Pose")
+    #     goal_joint_state = JointState()
+    #     goal_joint_state.name = self.joint_names
+    #     goal_joint_state.position = [-(1.5708+0.7854),
+    #                                  -0.7854,
+    #                                  -2.8,
+    #                                  -0.1,
+    #                                  -1.5708,
+    #                                  1.5708]
+    #     self.send_joint_goal(goal_joint_state)
+    #     print ("End Pose Approached")
 
 
 
@@ -250,8 +248,12 @@ class MoveArm(object):
             # call calculation function
             down, side, final = test.calc_move()
             # exec move(s). second move primarily to return to initial position.
-            test.move_tip_in_amp(side, 0, -down)
-            test.move_tip_in_amp(-side, 0, 0)
+            if side == 0:
+                test.move_tip_in_amp(0, 0, -down)
+            else:
+                test.move_tip_in_amp(-side, 0, 0)
+                test.move_tip_in_amp(2*side, 0, -down)
+                test.move_tip_in_amp(-side, 0, 0)
             # If blade has made it's final move (as calculated in calc_move), function is exited
             if final == True:
                 d2t = test.distance2table()
@@ -259,15 +261,20 @@ class MoveArm(object):
                 return
 
     def calc_move(self):
+        # Init
+        final = False # init
+        blade_length = 0.10 #Lenght of Blade
+        ft_threshold = 3 # Threshold for ft
+        max_ft = 15 # Set maximum ft
+
         # Get values for computation
-        final = False
-        ft_threshold = 3
-        max_ft = 10
-        cur_ft = 2
-        d2t = test.distance2table()
+        # cur_ft = -self.ft # Get current ft
+        cur_ft = 4
+        d2t = test.distance2table() # Get current distance to table
         print("Distance to Table %s" % d2t)
+        print("Current FT %s" %cur_ft)
         # If FT value is below a threshold, no further computation needed
-        if cur_ft < ft_threshold:
+        if cur_ft <= ft_threshold:
             down = 0.01
             side = 0
             # If current step size is smaller than the distance to the table,
@@ -286,16 +293,18 @@ class MoveArm(object):
             if d2t <= down:
                 down = d2t
                 final = True
-            print("Down %s" % down)
-            side = 0.05
+            side = float(blade_length)/2
 
+        print("Side %s" % side)
+        print("Down %s" % down)
         return (down,side,final)
 
     def ft_callback(self,data):
-        pass
         # calculate length of ft euclidean vector
-        ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
-        self.ft = sqrt(ft)
+        # ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
+        # self.ft = sqrt(ft)
+        ft = data.wrench.force.z
+        self.ft = ft
         # print(ft)
 
 if __name__ == '__main__':
