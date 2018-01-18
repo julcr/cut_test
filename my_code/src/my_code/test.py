@@ -11,6 +11,7 @@ from geometry_msgs.msg import PoseStamped, Quaternion, Point, WrenchStamped
 from giskard_msgs.msg import ControllerListGoal, Controller, ControllerListAction
 from sensor_msgs.msg import JointState
 from numpy import pi
+import numpy as np
 from math import sqrt
 from std_msgs.msg import String
 from tf.transformations import quaternion_about_axis, quaternion_from_euler
@@ -39,6 +40,7 @@ class MoveArm(object):
         # This declares the subscription to the "/kms40/wrench_zeroed" topic which is of type WrenchStamped.
         # When new messages are recieved, ft_callback is invoked.
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
+        self.ft_list = []
 
 
     def send_cart_goal(self, goal_pose,translation_weight=1,rotation_weight=1):
@@ -99,7 +101,7 @@ class MoveArm(object):
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.05 #Offset in cm
+        offset_tip = 0.01 #Offset in cm
         distance2table = trans.transform.translation.z - offset_tip
         return distance2table
 
@@ -254,22 +256,34 @@ class MoveArm(object):
                 test.move_tip_in_amp(-side, 0, 0)
                 test.move_tip_in_amp(2*side, 0, -down)
                 test.move_tip_in_amp(-side, 0, 0)
-            # If blade has made it's final move (as calculated in calc_move), function is exited
+
+         # If blade has made it's final move (as calculated in calc_move), function is exited
             if final == True:
                 d2t = test.distance2table()
                 print("Final Distance to Table %s" % d2t)
                 return
+
+    def max_ft(self):
+        # last_meas = np.array(self.ft_list)
+
+        # Get max. FT value from list and empty list
+        ft_max = max(self.ft_list)
+        self.ft_list = []
+        # ft_max = last_meas.mean()
+        print("Max. FT: %s" % ft_max)
+        return(ft_max)
 
     def calc_move(self):
         # Init
         final = False # init
         blade_length = 0.10 #Lenght of Blade
         ft_threshold = 3 # Threshold for ft
-        max_ft = 15 # Set maximum ft
+        ft_limit = 15 # Set maximum ft
 
         # Get values for computation
         # cur_ft = -self.ft # Get current ft
-        cur_ft = 4
+        cur_ft = test.max_ft()
+        # cur_ft = 2
         d2t = test.distance2table() # Get current distance to table
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
@@ -287,8 +301,8 @@ class MoveArm(object):
             # Calculation of movement, if the value from the ft-sensor exceeds the threshold
             # the higher the ft, the lower the step size on z-axis
             # movement on x axis is not taken into calculation
-            down = (1-(float(cur_ft)/max_ft))*0.01
-            if cur_ft >= max_ft:
+            down = (1-(float(cur_ft)/ft_limit))*0.01
+            if cur_ft >= ft_limit:
                 down = 0.001
             if d2t <= down:
                 down = d2t
@@ -304,8 +318,10 @@ class MoveArm(object):
         # ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
         # self.ft = sqrt(ft)
         ft = data.wrench.force.z
-        self.ft = ft
-        # print(ft)
+        # self.ft = ft
+        # Add elements to list
+        self.ft_list.append(-ft)
+
 
 if __name__ == '__main__':
 
@@ -314,12 +330,13 @@ if __name__ == '__main__':
 
     test = MoveArm()
 
-    # test.relative_goal([0.,0,0.05],[0,0,0,1])
 
     # print "Please make sure that your robot can move freely before proceeding!"
     # inp = raw_input("Continue? y/n: ")[0]
     # # if (inp == 'y'):
     #     print ("Start")
+
+
 
     test.go_to_home() # Aufruf der Start-Pose
     test.move_tip_in_amp(0,0,-0.10)
@@ -327,7 +344,6 @@ if __name__ == '__main__':
     rospy.sleep(2)
     test.go_to_home()  # Aufruf der Start-Pose
 
-    # test.go_to_end_cutting()  # Aufruf der End-Pose
 
 
     #     print ("End")
@@ -335,4 +351,4 @@ if __name__ == '__main__':
     #     print ("Halting program")
 
     # spin() simply keeps python from exiting until this node is stopped
-    # rospy.spin()
+    rospy.spin()
