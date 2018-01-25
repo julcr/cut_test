@@ -101,7 +101,7 @@ class MoveArm(object):
 
     def distance2table(self):
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.01 #Offset in cm
+        offset_tip = 0.007 #Offset in cm
         distance2table = trans.transform.translation.z - offset_tip
         return distance2table
 
@@ -266,8 +266,9 @@ class MoveArm(object):
     def max_ft(self):
         # last_meas = np.array(self.ft_list)
 
-        # Get max. FT value from list and empty list
+        # Get max. FT value from list
         ft_max = max(self.ft_list)
+        # Empty list
         self.ft_list = []
         # ft_max = last_meas.mean()
         print("Max. FT: %s" % ft_max)
@@ -276,14 +277,14 @@ class MoveArm(object):
     def calc_move(self):
         # Init
         final = False # init
-        blade_length = 0.10 #Lenght of Blade
+        blade_length = 0.06 #Lenght of Blade in m
         ft_threshold = 3 # Threshold for ft
         ft_limit = 15 # Set maximum ft
 
         # Get values for computation
         # cur_ft = -self.ft # Get current ft
-        cur_ft = test.max_ft()
-        # cur_ft = 2
+        cur_ft = test.max_ft() # Get max ft from prev movement
+        # cur_ft = 8
         d2t = test.distance2table() # Get current distance to table
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
@@ -339,9 +340,9 @@ if __name__ == '__main__':
 
 
     test.go_to_home() # Aufruf der Start-Pose
-    test.move_tip_in_amp(0,0,-0.10)
+    test.move_tip_in_amp(0,0,-0.12)
     test.master_cut()# Aufruf der Schnittbewegung
-    rospy.sleep(2)
+    rospy.sleep(1)
     test.go_to_home()  # Aufruf der Start-Pose
 
 

@@ -1,0 +1,9 @@
+<launch>
+  <arg name="path" default="/home/robo/bags/" />
+  <arg name="file" default="Test2" />
+
+  <include file="$(find iai_table_robot_description)/launch/upload.launch" />
+
+  <node pkg="rosbag" type="play" name="player" output="screen" args="--clock --pause $(arg path)$(arg file).bag"/>
+
+</launch>
