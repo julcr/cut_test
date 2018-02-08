@@ -87,7 +87,7 @@ class MoveArm(object):
         p.pose.orientation = Quaternion(*orientation)
         self.send_cart_goal(p,translation_weight,rotation_weight)
 
-    def move_tip_in_amp(self, x, y, z, translation_weight=1,rotation_weight=1):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
+    def move_tip_in_amp(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,
                                                rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf 'arm_mounting_plate'-Frame
         p = PoseStamped()
@@ -97,11 +97,15 @@ class MoveArm(object):
         p.pose.position.y += y
         p.pose.position.z += z
         p.pose.orientation = trans.transform.rotation
-        test.send_cart_goal(p,translation_weight,rotation_weight)
+        test.send_cart_goal(p)
 
     def distance2table(self):
+        # Abfrage der Position des Frames 'gripper_tool_frame' in Bezug auf 'arm_mounting_plate'.
+        # Das Frame 'arm_mounting_plate' entspricht dabei der Tischoberkante.
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
-        offset_tip = 0.007 #Offset in cm
+        # Offset in cm (Dicke des Schneidbretts +  Abstand von Klinge zum Frame 'gripper_tool_frame'.
+        offset_tip = 0.007
+        # Kalkulation des Abstandes von Klingen-Unterseite zum Schneidebrett
         distance2table = trans.transform.translation.z - offset_tip
         return distance2table
 
@@ -141,7 +145,7 @@ class MoveArm(object):
     #                                  1.5708]
     #     self.send_joint_goal(goal_joint_state)
     #     print ("Start Pose Approached")
-
+    # Definition der Ausgangsposition-Position
     def go_to_home(self):
         print ("Approach Start Pose")
         goal_joint_state = JointState()
@@ -243,52 +247,57 @@ class MoveArm(object):
     #         q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
     #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
     #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
-
+    # Ausfuehrung des Schnittprogramms
     def master_cut(self):
+        # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
         d2t = test.distance2table()
         while d2t > 0:
-            # call calculation function
+            # Aufruf der Funktion, die die Bewegung berechnet.
             down, side, final = test.calc_move()
-            # exec move(s). second move primarily to return to initial position.
+            # Ausfuehrung der Bewegung
             if side == 0:
                 test.move_tip_in_amp(0, 0, -down)
+            # Wenn F/T-Wert den Grenzwert ueberschreitet, kommt eine Bewegung in x Richtung dazu.
+            # Dabei wird zunaechst die Klinge ohne Bewegung zurueck gefahren, um von der vollen Klingenlaenge
+            # zu profitieren. Anschliessend erfolgt eine diagonale Schnittbewegung ueber die gesamte Klingenlaenge.
+            # Abschliessend eine weitere diagonale Bewegung, um wieder in die Ausgangsposition (x-Achse) zu gelangen.
             else:
                 test.move_tip_in_amp(-side, 0, 0)
                 test.move_tip_in_amp(2*side, 0, -down)
-                test.move_tip_in_amp(-side, 0, 0)
+                test.move_tip_in_amp(-side, 0, -down)
 
-         # If blade has made it's final move (as calculated in calc_move), function is exited
+         # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
+         # wird die Funktion beendet.
             if final == True:
-                d2t = test.distance2table()
-                print("Final Distance to Table %s" % d2t)
                 return
 
+    # Funktion um den maximalen F/T waehrend der Bewegung auszulesen.
     def max_ft(self):
-        # last_meas = np.array(self.ft_list)
-
-        # Get max. FT value from list
+        # Abfrage des max. F/T aus der Liste der F/T Werte
         ft_max = max(self.ft_list)
-        # Empty list
+        # Nach dem der Wert zwischengespeichert worden ist, wird die Liste fuer den naechsten Durchlauf zurueckgesetzt
         self.ft_list = []
-        # ft_max = last_meas.mean()
         print("Max. FT: %s" % ft_max)
         return(ft_max)
 
+    # Funktion um die Schnittbewegung zu berechnen
     def calc_move(self):
         # Init
-        final = False # init
-        blade_length = 0.06 #Lenght of Blade in m
-        ft_threshold = 3 # Threshold for ft
-        ft_limit = 15 # Set maximum ft
-
-        # Get values for computation
-        # cur_ft = -self.ft # Get current ft
-        cur_ft = test.max_ft() # Get max ft from prev movement
+        # final = False
+        # Laenge der Klinge
+        blade_length = 0.06
+        # Grenzwert, ab welchem die Schnittbewegung nicht laenger ausschliesslich entlang der z-Achse ausgefuehrt wird
+        ft_threshold = 3
+        # Maximales F/T fuer die Berechnung der Schnittbewegung
+        ft_limit = 15
+        # Abfrage des maximalen F/T-Werts aus der letzten Bewegung
+        cur_ft = test.max_ft()
         # cur_ft = 8
+        # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
         d2t = test.distance2table() # Get current distance to table
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
-        # If FT value is below a threshold, no further computation needed
+        # Wenn der F/T Werten den Grenzwert unterschreitet, wird down = 0.01 gesetzt
         if cur_ft <= ft_threshold:
             down = 0.01
             side = 0
