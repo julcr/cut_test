@@ -21,6 +21,11 @@ from tf.transformations import quaternion_about_axis, quaternion_from_euler
 class MoveArm(object):
     # Offset in cm (Dicke des Schneidbretts +  Abstand von Klinge zum Frame 'gripper_tool_frame'.
     offset_tip = 0.1015
+    blade_len = 0.05
+    ft_limit = 50
+    ft_threshold = 50
+    step_down = 0.01
+
     def __init__(self, enabled=True):
         self.enabled = enabled
         self.client = SimpleActionClient('/qp_controller/command', ControllerListAction)
@@ -164,39 +169,28 @@ class MoveArm(object):
         self.send_joint_goal(goal_joint_state)
         print ("Start Pose Approached")
 
-    # # Definition der End Pose
-    # def go_to_end_cutting(self):
-    #     print ("Approach End Pose")
-    #     goal_joint_state = JointState()
-    #     goal_joint_state.name = self.joint_names
-    #     goal_joint_state.position = [-(1.5708+0.7854),
-    #                                  -0.7854,
-    #                                  -2.8,
-    #                                  -0.1,
-    #                                  -1.5708,
-    #                                  1.5708]
-    #     self.send_joint_goal(goal_joint_state)
-    #     print ("End Pose Approached")
-
-
-
-    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
+    # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     # def straight_cut(self):
     #     d2t = test.distance2table()
     #     test.relative_goal([0,-d2t,0],[0,0,0,1])
     #
+
+    # Hackende Bewegung
     # def straight_chop(self):
     #     max_step = 6
     #     for i in range(max_step):
     #         test.relative_goal([0,-0.02,0],[0,0,0,1])
     #         test.relative_goal([0,0.01,0], [0, 0, 0, 1])
     #
+    # Saegende Bewegung
     # def saw(self):
     #     max_step = 6
     #     for i in range(max_step):
     #         test.relative_goal([0, -0.005, 0.05], [0, 0, 0, 1])
     #         test.relative_goal([0, -0.005, -0.05], [0, 0, 0, 1])
     #
+
+    # Einfache rollende Schnittbewegung
     # def roll_simple(self):
     #     q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
     #     test.relative_goal([0,0,0],q,translation_weight=100) # Erhohung der Gewichtung der Translation, damit die Spitze genauer in Position bleibt
@@ -204,6 +198,7 @@ class MoveArm(object):
     #     q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
     #     test.relative_goal([0, 0, 0],q_1,translation_weight=100)
     #
+    # Erweiterte rollende Schnittbewegung
     # def roll_advanced(self):
     #     q = quaternion_from_euler(0, 0.3, 0, 'ryxz')
     #     test.relative_goal([0, 0, 0], q, translation_weight=100)
@@ -211,6 +206,7 @@ class MoveArm(object):
     #     test.move_tip_in_amp(-0.05, 0, 0)
     #     q_1 = quaternion_from_euler(0, -0.3, 0, 'ryxz')
     #     test.relative_goal([0, 0, 0], q_1, translation_weight=100)
+    #
     #
     # def cross_cut(self):
     #     max_step = 5
@@ -222,37 +218,7 @@ class MoveArm(object):
     #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
     #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
-    #Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
-    # def straight_cut(self):
-    #     d2t = test.distance2table()
-    #     test.relative_goal([0,-d2t,0],[0,0,0,1])
-    #
-    # def straight_cut3(self):
-    #     d2t = test.distance2table()
-    #     while d2t > 0:
-    #        d2t = test.distance2table()
-    #        #select down
-    #        down = 0.01
-    #        print("Distance to Table %s" % d2t)
-    #        test.move_tip_in_amp(0, 0, -down)
-    #        d2t = test.distance2table()
-    #        if d2t <= down:
-    #             test.move_tip_in_amp(0, 0, -d2t)
-    #             print("Distance to Table %s" % d2t)
-    #             return
 
-
-    # def cross_cut2(self):
-    #     d2t = test.distance2table()
-    #     max_step = 5
-    #     for i in range(max_step):
-    #         q = quaternion_from_euler(0, 0.1, 0, 'ryxz')
-    #         test.relative_goal([0, 0, 0], q, translation_weight=100)
-    #         test.relative_goal([0, -0.01, 0.05], [0, 0, 0, 1])
-    #         q_1 = quaternion_from_euler(0, -0.1, 0, 'ryxz')
-    #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
-    #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
-    # Ausfuehrung des Schnittprogramms
     def master_cut(self):
         # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
         d2t = test123.distance2table()
@@ -267,15 +233,15 @@ class MoveArm(object):
             # zu profitieren. Anschliessend erfolgt eine diagonale Schnittbewegung ueber die gesamte Klingenlaenge.
             # Abschliessend eine weitere diagonale Bewegung, um wieder in die Ausgangsposition (x-Achse) zu gelangen.
             else:
-                test123.move_tip_in_amp(-side, 0, 0)
-                test123.move_tip_in_amp(2 * side, 0, -(2 / 3) * down)
-                test123.move_tip_in_amp(-side, 0, -(1 / 3) * down)
+                test123.move_tip_in_amp(-side, 0, -(1/4) * down)
+                test123.move_tip_in_amp(2 * side, 0, -(2 / 4) * down)
+                test123.move_tip_in_amp(-side, 0, -(1 / 4) * down)
 
          # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
          # wird die Funktion beendet.
             if final == True:
-                test123.move_tip_in_amp(-side, 0, 0)
-                test123.move_tip_in_amp(2*side, 0, 0)
+                test123.move_tip_in_amp(self.blade_len/2, 0, 0)
+                test123.move_tip_in_amp(-self.blade_len*2, 0, 0)
                 return
 
     # Funktion um den maximalen F/T waehrend der Bewegung auszulesen.
@@ -291,28 +257,23 @@ class MoveArm(object):
     def calc_move(self):
         """
         Return von 3 Werte fuer die Ausfuehrung des Schnitts
-        :return: 1 Wert: Schnitttiefe , 2. Wert: Seitliche Bewegung, 3. Wert: Gibt letzten Schnitt an
+        :return: 1. Wert: Schnitttiefe , 2. Wert: Seitliche Bewegung, 3. Wert: Gibt letzten Schnitt an
         :type: (float,float,bool)
         """
 
         # Init
         final = False
-        # Laenge der Klinge
-        blade_length = 0.05
-        # Grenzwert, ab welchem die Schnittbewegung nicht laenger ausschliesslich entlang der z-Achse ausgefuehrt wird
-        ft_threshold = 6
         # Maximales F/T fuer die Berechnung der Schnittbewegung
-        ft_limit = 40
         # Abfrage des maximalen F/T-Werts aus der letzten Bewegung
         cur_ft = test123.max_ft()
-        # cur_ft = 7
+        # cur_ft = 14
         # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
         d2t = test123.distance2table() # Get current distance to table
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
         # Wenn der F/T Werten den Grenzwert unterschreitet, wird down = 0.01 gesetzt.
-        if cur_ft <= ft_threshold:
-            down = 0.01
+        if cur_ft <= self.ft_threshold:
+            down = self.step_down
             side = 0
             # Wenn die Schrittweite kleiner als der Abstand zur Oberflaeche ist,
             # wird die Schrittweite der naechsten Bewegung entsprechend angepasst,
@@ -327,9 +288,10 @@ class MoveArm(object):
             # Calculation of movement, if the value from the ft-sensor exceeds the threshold
             # the higher the ft, the lower the step size on z-axis
             # movement on x axis is not taken into calculation
-            down = (1-(cur_ft)/ft_limit)*0.01
+            down = (1-(cur_ft)/self.ft_limit)*(self.step_down/(1-(cur_ft)/self.ft_limit))
+            side = self.blade_len / 2
             # Setzen eines Minimums
-            if cur_ft >= ft_limit:
+            if cur_ft >= self.ft_limit:
                 down = 0.001
             # Wenn die Schrittweite kleiner als der Abstand zur Oberflaeche ist,
             # wird die Schrittweite der naechsten Bewegung entsprechend angepasst,
@@ -337,7 +299,7 @@ class MoveArm(object):
             if d2t <= down:
                 down = d2t
                 final = True
-            side = blade_length/2
+
 
         print("Side %s" % side)
         print("Down %s" % down)
@@ -349,9 +311,9 @@ class MoveArm(object):
         :param data: sensor data
         :type: WrenchStamped
         """
-        # if abs(data.wrench.force.z) > 5:
-        #     print("Stop")
-        #     self.client.cancel_all_goals()
+        if abs(data.wrench.force.z) > 50:
+            print("Stop")
+            self.client.cancel_all_goals()
 
         # calculate length of ft euclidean vector
         # ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
@@ -359,8 +321,8 @@ class MoveArm(object):
         ft = data.wrench.force.z
         # self.ft = ft
         # Add elements to list
-        d2t = test123.distance2table() # Get current distance to table
-        print("Distance to Table %s" % d2t)
+        # d2t = test123.distance2table() # Get current distance to table
+        # print("Distance to Table %s" % d2t)
         self.ft_list.append(-ft)
 
     def align(self):
