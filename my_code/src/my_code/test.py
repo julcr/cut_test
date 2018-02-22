@@ -20,10 +20,10 @@ from tf.transformations import quaternion_about_axis, quaternion_from_euler
 
 class MoveArm(object):
     # Offset in cm (Dicke des Schneidbretts +  Abstand von Klinge zum Frame 'gripper_tool_frame'.
-    offset_tip = 0.1015
+    offset_tip = 0.1016
     blade_len = 0.05
     ft_limit = 50
-    ft_threshold = 50
+    ft_threshold = 15
     step_down = 0.01
 
     def __init__(self, enabled=True):
@@ -241,7 +241,9 @@ class MoveArm(object):
          # wird die Funktion beendet.
             if final == True:
                 test123.move_tip_in_amp(self.blade_len/2, 0, 0)
-                test123.move_tip_in_amp(-self.blade_len*2, 0, 0)
+                test123.move_tip_in_amp(-self.blade_len, 0, 0)
+                test123.move_tip_in_amp(self.blade_len/2, 0, 0)
+                test123.move_tip_in_amp(0, 0.03, 0.005)
                 return
 
     # Funktion um den maximalen F/T waehrend der Bewegung auszulesen.
@@ -311,7 +313,7 @@ class MoveArm(object):
         :param data: sensor data
         :type: WrenchStamped
         """
-        if abs(data.wrench.force.z) > 50:
+        if abs(data.wrench.force.z) > 60:
             print("Stop")
             self.client.cancel_all_goals()
 
