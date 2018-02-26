@@ -112,6 +112,10 @@ class MoveArm(object):
         test123.send_cart_goal(p)
 
     def distance2table(self):
+        """
+        Calculation of the remaining distance to the table.
+        :return:
+        """
         # Abfrage der Position des Frames 'gripper_tool_frame' in Bezug auf 'arm_mounting_plate'.
         # Das Frame 'arm_mounting_plate' entspricht dabei der Tischoberkante.
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
