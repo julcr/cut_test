@@ -19,12 +19,12 @@ from tf.transformations import quaternion_about_axis, quaternion_from_euler
 
 
 class MoveArm(object):
-    # Offset in cm (Dicke des Schneidbretts +  Abstand von Klinge zum Frame 'gripper_tool_frame'.
-    offset_tip = 0.1016
-    blade_len = 0.05
-    ft_limit = 50
-    ft_threshold = 15
-    step_down = 0.01
+    # Variablen die den Schnitt unmittelbar beeinflussen
+    offset_tip = 0.103  # Offset in cm (Dicke des Schneidbretts + Abstand zw. Fingerspitze und Klingenunterseite)
+    blade_len = 0.05 # Laenge der Klinge
+    ft_limit = 50 # Kraft Grenzwert
+    ft_threshold = 15 # Kraft Schwellwert
+    step_down = 0.01 # Standard Schnitttiefe
 
     def __init__(self, enabled=True):
         self.enabled = enabled
@@ -47,13 +47,14 @@ class MoveArm(object):
 
         # This declares the subscription to the "/kms40/wrench_zeroed" topic which is of type WrenchStamped.
         # When new messages are recieved, ft_callback is invoked.
+        #
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
         self.ft_list = []
         # Service wartet auf ein Objekt vom Typ Trigger
         self.reset_ft = rospy.ServiceProxy("/ft_cleaner/update_offset",Trigger)
         rospy.sleep(1)
         self.reset_ft.call(TriggerRequest()) #Trigger Objekt
-    #
+
     def send_cart_goal(self, goal_pose,translation_weight=1,rotation_weight=1):
         if self.enabled:
             goal = ControllerListGoal()
@@ -243,7 +244,7 @@ class MoveArm(object):
                 test123.move_tip_in_amp(self.blade_len/2, 0, 0)
                 test123.move_tip_in_amp(-self.blade_len, 0, 0)
                 test123.move_tip_in_amp(self.blade_len/2, 0, 0)
-                test123.move_tip_in_amp(0, 0.03, 0.005)
+                test123.move_tip_in_amp(0, 0.05, 0.005)
                 return
 
     # Funktion um den maximalen F/T waehrend der Bewegung auszulesen.
@@ -258,50 +259,53 @@ class MoveArm(object):
     # Funktion um die Schnittbewegung zu berechnen
     def calc_move(self):
         """
-        Return von 3 Werte fuer die Ausfuehrung des Schnitts
-        :return: 1. Wert: Schnitttiefe , 2. Wert: Seitliche Bewegung, 3. Wert: Gibt letzten Schnitt an
+        Return of three values necessary for cut-move execution.
+        :return: 1.value:cutting depth; 2.value: lateral move; 3.value: final cut
         :type: (float,float,bool)
         """
 
         # Init
         final = False
-        # Maximales F/T fuer die Berechnung der Schnittbewegung
+
         # Abfrage des maximalen F/T-Werts aus der letzten Bewegung
         cur_ft = test123.max_ft()
-        # cur_ft = 14
-        # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
-        d2t = test123.distance2table() # Get current distance to table
+
+        # Abfrage des aktuellen Abstands von Klingenunterseite zu Schneidebrett
+        d2t = test123.distance2table()
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
-        # Wenn der F/T Werten den Grenzwert unterschreitet, wird down = 0.01 gesetzt.
-        if cur_ft <= self.ft_threshold:
+
+        # Wenn der Kraftwert den Schwellwert unterschreitet, wird nur entlang der z-Achse geschnitten
+        if cur_ft < self.ft_threshold:
             down = self.step_down
             side = 0
-            # Wenn die Schrittweite kleiner als der Abstand zur Oberflaeche ist,
-            # wird die Schrittweite der naechsten Bewegung entsprechend angepasst,
+            # Wenn die Schritttiefe kleiner als der Abstand zur Oberflaeche ist,
+            # wird die Schritttiefe der naechsten Bewegung auf die verbleibende Distanz gesetzt,
             # um Kollisionen mit dem Tisch zu vermeiden.
-            # If current step size is smaller than the distance to the table,
-            # the next step is set to the remaining distance to avoid collision
-            # and final is set to true.
             if d2t <= down:
                 down = d2t
                 final = True
         else:
-            # Calculation of movement, if the value from the ft-sensor exceeds the threshold
-            # the higher the ft, the lower the step size on z-axis
-            # movement on x axis is not taken into calculation
-            down = (1-(cur_ft)/self.ft_limit)*(self.step_down/(1-(cur_ft)/self.ft_limit))
-            side = self.blade_len / 2
-            # Setzen eines Minimums
-            if cur_ft >= self.ft_limit:
+            # Berechnung der Bewegung, wenn der Kraftschwellwert ueberschritten wird.
+
+            # Je hoeher der gemessene Kraftwert, desto geringer die Schnitttiefe.
+            # Die maximale berechnete Schnitttiefe entspricht der Standardschnitttiefe,
+            # wenn die Kraft dem Schwellwert entspricht.
+            down = (1-(cur_ft)/self.ft_limit)*(self.step_down)
+
+            # Setzen einer Mindestschnitttiefe
+            if down < 0.001:
                 down = 0.001
-            # Wenn die Schrittweite kleiner als der Abstand zur Oberflaeche ist,
+
+            # Wenn die berechnete Schrittweite kleiner als der Abstand zur Oberflaeche ist,
             # wird die Schrittweite der naechsten Bewegung entsprechend angepasst,
             # um Kollisionen mit dem Tisch zu vermeiden.
             if d2t <= down:
                 down = d2t
-                final = True
+                final = True # Letzte Bewegung
 
+            # Die seitliche Bewegung entspricht der Haelfte der Klingenlaenge.
+            side = self.blade_len / 2
 
         print("Side %s" % side)
         print("Down %s" % down)
@@ -313,26 +317,23 @@ class MoveArm(object):
         :param data: sensor data
         :type: WrenchStamped
         """
+        # Abbruch der Bewegung, wenn gemessene Kraft >60 Nm, um Sicherheitsabschaltung des Arms zuvorzukommen.
         if abs(data.wrench.force.z) > 60:
             print("Stop")
             self.client.cancel_all_goals()
 
-        # calculate length of ft euclidean vector
-        # ft = abs(data.wrench.force.x*data.wrench.force.y*data.wrench.force.z)
-        # self.ft = sqrt(ft)
-        ft = data.wrench.force.z
-        # self.ft = ft
-        # Add elements to list
-        # d2t = test123.distance2table() # Get current distance to table
-        # print("Distance to Table %s" % d2t)
-        self.ft_list.append(-ft)
+        # Auslesen der Kraft in z-Richtung und hinzufuegen zu einer Liste.
+        ft = abs(data.wrench.force.z)
+        self.ft_list.append(ft)
 
     def align(self):
+        """
+        Alignment of the knife
+        """
         # Ausrichtung des Messers
-        # y: Kippen nach vorne
-        # x: Drehung, damit messer gerade geschneidet (schief eingespannt)
         q = quaternion_from_euler(0, -0.15, 0.02, 'ryxz')
         test123.relative_goal([0, 0, 0], q)
+
 
 
 if __name__ == '__main__':
@@ -342,26 +343,11 @@ if __name__ == '__main__':
 
     test123 = MoveArm()
 
-
-    # print "Please make sure that your robot can move freely before proceeding!"
-    # inp = raw_input("Continue? y/n: ")[0]
-    # # if (inp == 'y'):
-    #     print ("Start")
-
-
-    #
-    test123.go_to_home() # Aufruf der Start-Pose
-    test123.align()
-    test123.move_tip_in_amp(0, 0, -0.03)
+    test123.go_to_home() # Aufruf der Ausgangs-Pose
+    test123.align() # Ausrichtung der Klinge
+    test123.move_tip_in_amp(0, 0,-0.03) # Positionierung ueber Schnittobjekt
     test123.master_cut()# Aufruf der Schnittbewegung
-    rospy.sleep(1)
-    test123.go_to_home()  # Aufruf der Start-Pose
-
-
-
-    #     print ("End")
-    # else:
-    #     print ("Halting program")
+    test123.go_to_home()  # Aufruf der Ausgangs-Pose
 
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
