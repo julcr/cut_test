@@ -44,13 +44,14 @@ class MoveArm(object):
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
 
-
-        # This declares the subscription to the "/kms40/wrench_zeroed" topic which is of type WrenchStamped.
-        # When new messages are recieved, ft_callback is invoked.
-        #
+        # Subcriber für das Topic"/kms40/wrench_zeroed". Wenn Nachrichten empfangen werden, wird die Funktion
+        # ft_callback aufgerufen.
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
-        self.ft_list = []
-        # Service wartet auf ein Objekt vom Typ Trigger
+
+        self.ft_list = [] #Liste für die gemessenen Kraftwerte.
+
+        # Service, um den Offset des Kraftmomentensensors zu aktualisieren.
+        # Der Service wartet auf ein Objekt vom Typ Trigger.
         self.reset_ft = rospy.ServiceProxy("/ft_cleaner/update_offset",Trigger)
         rospy.sleep(1)
         self.reset_ft.call(TriggerRequest()) #Trigger Objekt
@@ -99,13 +100,25 @@ class MoveArm(object):
         p.pose.orientation = Quaternion(*orientation)
         self.send_cart_goal(p,translation_weight,rotation_weight)
 
-    def move_tip_in_amp(self, x, y, z):  # Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp)
+    def move_tip_in_amp(self, x, y, z):
+        """
+        Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp).
+        :type x,y,z: Distanz in Meter
+        :param x: Bewegung entlang der x-Achse des Frame 'arm_mounting_plate'
+        :param y: Bewegung entlang der y-Achse des Frame 'arm_mounting_plate'
+        :param z: Bewegung entlang der z-Achse des Frame 'arm_mounting_plate'
+
+        """
+
+        # Ermittelung der Position des Frames Gripper Tool in Bezug auf 'arm_mounting_plate'-Frame
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,
-                                               rospy.Time())  # Ermittelung der Position von Gripper Tool Frame in Bezug auf 'arm_mounting_plate'-Frame
+                                               rospy.Time())
         p = PoseStamped()
         p.header.frame_id = 'arm_mounting_plate'
-        p.pose.position = trans.transform.translation  # Uebernahme der soeben ermittelten Werte
-        p.pose.position.x += x  # Addition der Bewegung in x-Richtung
+
+        # Die soeben ermittelten Werte werden uebernommen und mit den Werten der gewuenschten Bewegung addiert.
+        p.pose.position = trans.transform.translation
+        p.pose.position.x += x
         p.pose.position.y += y
         p.pose.position.z += z
         p.pose.orientation = trans.transform.rotation
@@ -113,14 +126,15 @@ class MoveArm(object):
 
     def distance2table(self):
         """
-        Calculation of the remaining distance to the table.
-        :return:
+        Berechnung des Abstandes von Klingenunterkante zu Oberflaeche der Schneidunterlage.
+        :rtype: Distanz in Meter
+        :return: Abstand zum Tisch
         """
         # Abfrage der Position des Frames 'gripper_tool_frame' in Bezug auf 'arm_mounting_plate'.
         # Das Frame 'arm_mounting_plate' entspricht dabei der Tischoberkante.
         trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip,rospy.Time())
 
-        # Kalkulation des Abstandes von Klingen-Unterseite zum Schneidebrett
+        # Kalkulation des Abstandes von Klingen-Unterseite zum Schneidebrett mit Offset.
         distance2table = trans.transform.translation.z - self.offset_tip
         return distance2table
 
@@ -147,22 +161,9 @@ class MoveArm(object):
             result = self.client.wait_for_result(rospy.Duration(10))
             print('finished in 10s?: {}'.format(result))
 
-    # Definition der Start Pose
-    # def go_to_start_cutting(self):
-    #     print ("Approach Start Pose")
-    #     goal_joint_state = JointState()
-    #     goal_joint_state.name = self.joint_names
-    #     goal_joint_state.position = [-(1.5708+0.7854),
-    #                                  -1.668,
-    #                                  -(1.5708+0.7854),
-    #                                  -2.26,
-    #                                  -1.5708,
-    #                                  1.5708]
-    #     self.send_joint_goal(goal_joint_state)
-    #     print ("Start Pose Approached")
-    # Definition der Ausgangsposition-Position
+
     def go_to_home(self):
-        print ("Approach Start Pose")
+        print ("Approach Home Pose")
         goal_joint_state = JointState()
         goal_joint_state.name = self.joint_names
         goal_joint_state.position = [-2.417572323475973,
@@ -172,7 +173,7 @@ class MoveArm(object):
                                      1.5708668231964111,
                                      1.509663701057434]
         self.send_joint_goal(goal_joint_state)
-        print ("Start Pose Approached")
+        print ("Home Pose Approached")
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     # def straight_cut(self):
