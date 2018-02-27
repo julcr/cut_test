@@ -100,6 +100,46 @@ class MoveArm(object):
         p.pose.orientation = Quaternion(*orientation)
         self.send_cart_goal(p,translation_weight,rotation_weight)
 
+    def send_joint_goal(self, joint_state):
+        if self.enabled:
+            goal = ControllerListGoal()
+            goal.type = ControllerListGoal.STANDARD_CONTROLLER
+
+            # translation
+            controller = Controller()
+            controller.type = Controller.JOINT
+            controller.tip_link = self.tip
+            controller.root_link = self.root
+
+            controller.goal_state = joint_state
+
+            controller.p_gain = 3
+            controller.enable_error_threshold = False
+            controller.threshold_value = 0.01
+            controller.weight = 1.0
+            goal.controllers.append(controller)
+
+            self.client.send_goal(goal)
+            result = self.client.wait_for_result(rospy.Duration(10))
+            print('finished in 10s?: {}'.format(result))
+
+    def ft_callback(self,data):
+        """
+        Callback für den Kraft-/Momentensensor
+        :param data: Sensordaten
+        :type: WrenchStamped
+        """
+
+        # Abbruch der Bewegung, wenn gemessene Kraft >60 Nm, um Sicherheitsabschaltung des Arms zuvorzukommen.
+        if abs(data.wrench.force.z) > 60:
+            print("Stop")
+            self.client.cancel_all_goals()
+
+        # Der absolute Kraftwert wird ausgelesen und zu einer Liste hinzugefügt, die die Werte aneinander reiht, um
+        # spaeter daraus eine Schneidestrategie abzuleiten.
+        ft = abs(data.wrench.force.z)
+        self.ft_list.append(ft)
+
     def move_tip_in_amp(self, x, y, z):
         """
         Bewegung des Gripper Tool Frame in Bezug auf den Frame 'arm_mounting_plate' (amp).
@@ -138,31 +178,12 @@ class MoveArm(object):
         distance2table = trans.transform.translation.z - self.offset_tip
         return distance2table
 
-    def send_joint_goal(self, joint_state):
-        if self.enabled:
-            goal = ControllerListGoal()
-            goal.type = ControllerListGoal.STANDARD_CONTROLLER
-
-            # translation
-            controller = Controller()
-            controller.type = Controller.JOINT
-            controller.tip_link = self.tip
-            controller.root_link = self.root
-
-            controller.goal_state = joint_state
-
-            controller.p_gain = 3
-            controller.enable_error_threshold = False
-            controller.threshold_value = 0.01
-            controller.weight = 1.0
-            goal.controllers.append(controller)
-
-            self.client.send_goal(goal)
-            result = self.client.wait_for_result(rospy.Duration(10))
-            print('finished in 10s?: {}'.format(result))
-
-
     def go_to_home(self):
+        """
+        Definition der Standard Position.
+        :return:
+        """
+
         print ("Approach Home Pose")
         goal_joint_state = JointState()
         goal_joint_state.name = self.joint_names
@@ -174,6 +195,18 @@ class MoveArm(object):
                                      1.509663701057434]
         self.send_joint_goal(goal_joint_state)
         print ("Home Pose Approached")
+
+    def align(self):
+        """
+        Ausrichtung des Messers. Das Messer wird nach vorne gekippt, da die Klinge gebogen ist und sonst nicht bündig
+        mit dem Schneidebrett abschließen wuerde. Der tiefste Punkt der Klinge befindet sich so zentral über dem Objekt.
+        Ebenfalls wird das Messer um die z-Achse gedreht, da die Provisorische Halterung das Messer nicht perfekt
+        ausgerichtet aufnimmt. Diese Werte sind bei Verwendung von anderem Messer und Halterung anzupassen.
+        """
+        q = quaternion_from_euler(0, -0.15, 0.02, 'ryxz')
+        test123.relative_goal([0, 0, 0], q)
+
+    # Weitere Bewegungen des Endeffektors, die nicht beruecksichtigt wurden.
 
     # Einfache Schnittbewegung entlang der y-Achse (in Bezug auf gripper_tool_frame) bei gleicher Orientierung des Grippers
     # def straight_cut(self):
@@ -224,16 +257,25 @@ class MoveArm(object):
     #         test.relative_goal([0, 0, 0], q_1,translation_weight=100)
     #         test.relative_goal([0, 0, -0.05], [0, 0, 0, 1])
 
-
     def master_cut(self):
-        # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett
+        """
+        Funktion für die Planung und Ausfuehrung des Schnitte
+        :return:
+        """
+
+        # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett.
         d2t = test123.distance2table()
+
+        # Solange dieser Abstand positiv ist, also sich das Messer oberhalb des Schneidbretts befindet, wird geschnitten.
         while d2t > 0:
-            # Aufruf der Funktion, die die Bewegung berechnet.
+            # Aufruf der Funktion, die die Bewegung unter Berücksichtig verschiedener Paramenter berechnet und zurueckgibt.
             down, side, final = test123.calc_move()
-            # Ausfuehrung der Bewegung
+
+            # Bewegung, wenn der gemessene F/T Wert den Schwellwert nicht überschritten hat. In diesem Fall erfolgt die
+            # Bewegung rein entlang der z-Achse.
             if side == 0:
                 test123.move_tip_in_amp(0, 0, -down)
+
             # Wenn F/T-Wert den Grenzwert ueberschreitet, kommt eine Bewegung in x Richtung dazu.
             # Dabei wird zunaechst die Klinge ohne Bewegung zurueck gefahren, um von der vollen Klingenlaenge
             # zu profitieren. Anschliessend erfolgt eine diagonale Schnittbewegung ueber die gesamte Klingenlaenge.
@@ -243,23 +285,17 @@ class MoveArm(object):
                 test123.move_tip_in_amp(2 * side, 0, -(2 / 4) * down)
                 test123.move_tip_in_amp(-side, 0, -(1 / 4) * down)
 
-         # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
-         # wird die Funktion beendet.
+        # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
+        # wird die Funktion beendet. Der Schnittvorgang wird mit Bewegungen entlag der x-Achse abgeschlossen,
+        # um sicherzustellen, dass das Objekt in Gaenze durchtrennt wird. Abschließend fährt das Messer seitlich
+        # entlang der y-Achse um das abgetrennte Stück zu separieren.
             if final == True:
-                test123.move_tip_in_amp(self.blade_len/2, 0, 0)
-                test123.move_tip_in_amp(-self.blade_len, 0, 0)
-                test123.move_tip_in_amp(self.blade_len/2, 0, 0)
-                test123.move_tip_in_amp(0, 0.05, 0.005)
+                test123.move_tip_in_amp(-self.blade_len/2, 0, 0)
+                test123.move_tip_in_amp(self.blade_len, 0, 0)
+                test123.move_tip_in_amp(-self.blade_len/2, 0, 0.01)
+                test123.move_tip_in_amp(0, 0.05, 0)
                 return
 
-    # Funktion um den maximalen F/T waehrend der Bewegung auszulesen.
-    def max_ft(self):
-        # Abfrage des max. F/T aus der Liste der F/T Werte
-        ft_max = max(self.ft_list)
-        # Nach dem der Wert zwischengespeichert worden ist, wird die Liste fuer den naechsten Durchlauf zurueckgesetzt
-        self.ft_list = []
-        print("Max. FT: %s" % ft_max)
-        return(ft_max)
 
     # Funktion um die Schnittbewegung zu berechnen
     def calc_move(self):
@@ -302,7 +338,7 @@ class MoveArm(object):
             if down < 0.001:
                 down = 0.001
 
-            # Wenn die berechnete Schrittweite kleiner als der Abstand zur Oberflaeche ist,
+            # Wenn die berechnete Schrittweite kleiner als der Abstand zur Oberflaeche,
             # wird die Schrittweite der naechsten Bewegung entsprechend angepasst,
             # um Kollisionen mit dem Tisch zu vermeiden.
             if d2t <= down:
@@ -316,28 +352,19 @@ class MoveArm(object):
         print("Down %s" % down)
         return (down,side,final)
 
-    def ft_callback(self,data):
-        """
-        Callback for force torque sensor
-        :param data: sensor data
-        :type: WrenchStamped
-        """
-        # Abbruch der Bewegung, wenn gemessene Kraft >60 Nm, um Sicherheitsabschaltung des Arms zuvorzukommen.
-        if abs(data.wrench.force.z) > 60:
-            print("Stop")
-            self.client.cancel_all_goals()
 
-        # Auslesen der Kraft in z-Richtung und hinzufuegen zu einer Liste.
-        ft = abs(data.wrench.force.z)
-        self.ft_list.append(ft)
+    def max_ft(self):
+        """
+        Funktion um den maximalen F/T waehrend der vergangenen Bewegung auszulesen und zurückzugeben.
+        :return: Maximale Kraft während der letzten Bewegung
+        """
+        # Abfrage des max. F/T aus der Liste der F/T Werte
+        ft_max = max(self.ft_list)
+        # Nach dem der Wert zwischengespeichert worden ist, wird die Liste fuer den naechsten Durchlauf geleert.
+        self.ft_list = []
+        print("Max. FT: %s" % ft_max)
+        return(ft_max)
 
-    def align(self):
-        """
-        Alignment of the knife
-        """
-        # Ausrichtung des Messers
-        q = quaternion_from_euler(0, -0.15, 0.02, 'ryxz')
-        test123.relative_goal([0, 0, 0], q)
 
 
 
