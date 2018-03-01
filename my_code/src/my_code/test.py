@@ -20,10 +20,10 @@ from tf.transformations import quaternion_about_axis, quaternion_from_euler
 
 class MoveArm(object):
     # Variablen die den Schnitt unmittelbar beeinflussen
-    offset_tip = 0.103  # Offset in cm (Dicke des Schneidbretts + Abstand zw. Fingerspitze und Klingenunterseite)
+    offset_tip = 0.102 # Offset in cm (Dicke des Schneidbretts + Abstand zw. Fingerspitze und Klingenunterseite)
     blade_len = 0.05 # Laenge der Klinge
     ft_limit = 50 # Kraft Grenzwert
-    ft_threshold = 15 # Kraft Schwellwert
+    ft_threshold = 25 # Kraft Schwellwert
     step_down = 0.01 # Standard Schnitttiefe
 
     def __init__(self, enabled=True):
@@ -44,17 +44,21 @@ class MoveArm(object):
         self.tfBuffer = tf2_ros.Buffer()
         self.listener = tf2_ros.TransformListener(self.tfBuffer)
 
-        # Subcriber für das Topic"/kms40/wrench_zeroed". Wenn Nachrichten empfangen werden, wird die Funktion
+        # Subcriber fuer das Topic"/kms40/wrench_zeroed". Wenn Nachrichten empfangen werden, wird die Funktion
         # ft_callback aufgerufen.
         self.ft_sub = rospy.Subscriber("/kms40/wrench_zeroed", WrenchStamped, self.ft_callback)
 
-        self.ft_list = [] #Liste für die gemessenen Kraftwerte.
+        self.ft_list = [] #Liste fuer die gemessenen Kraftwerte.
 
         # Service, um den Offset des Kraftmomentensensors zu aktualisieren.
         # Der Service wartet auf ein Objekt vom Typ Trigger.
         self.reset_ft = rospy.ServiceProxy("/ft_cleaner/update_offset",Trigger)
         rospy.sleep(1)
         self.reset_ft.call(TriggerRequest()) #Trigger Objekt
+
+        # Publisher fuer die Position des Endeffektors
+        self.endeffector_pub = rospy.Publisher('endeffector_position',PoseStamped)
+
 
     def send_cart_goal(self, goal_pose,translation_weight=1,rotation_weight=1):
         if self.enabled:
@@ -125,17 +129,30 @@ class MoveArm(object):
 
     def ft_callback(self,data):
         """
-        Callback für den Kraft-/Momentensensor
+        Callback fuer den Kraft-/Momentensensor
         :param data: Sensordaten
         :type: WrenchStamped
         """
 
-        # Abbruch der Bewegung, wenn gemessene Kraft >60 Nm, um Sicherheitsabschaltung des Arms zuvorzukommen.
-        if abs(data.wrench.force.z) > 60:
+        # Abbruch der Bewegung, wenn gemessene Kraft das Limit ueberschreitet, um Sicherheitsabschaltung des Arms zuvorzukommen.
+        if abs(data.wrench.force.z) > self.ft_limit:
             print("Stop")
             self.client.cancel_all_goals()
 
-        # Der absolute Kraftwert wird ausgelesen und zu einer Liste hinzugefügt, die die Werte aneinander reiht, um
+        # Lokalisation des Endeffektors
+        trans = self.tfBuffer.lookup_transform('arm_mounting_plate', self.tip, rospy.Time())
+        p = PoseStamped()
+        p.header = trans.header
+        p.pose.position.x = trans.transform.translation.x
+        p.pose.position.y = trans.transform.translation.y
+        p.pose.position.z = trans.transform.translation.z
+        p.pose.orientation.x = trans.transform.rotation.x
+        p.pose.orientation.y = trans.transform.rotation.y
+        p.pose.orientation.z = trans.transform.rotation.z
+        p.pose.orientation.w = trans.transform.rotation.w
+        self.endeffector_pub.publish(p)
+
+        # Der absolute Kraftwert wird ausgelesen und zu einer Liste hinzugefuegt, die die Werte aneinander reiht, um
         # spaeter daraus eine Schneidestrategie abzuleiten.
         ft = abs(data.wrench.force.z)
         self.ft_list.append(ft)
@@ -198,13 +215,15 @@ class MoveArm(object):
 
     def align(self):
         """
-        Ausrichtung des Messers. Das Messer wird nach vorne gekippt, da die Klinge gebogen ist und sonst nicht bündig
-        mit dem Schneidebrett abschließen wuerde. Der tiefste Punkt der Klinge befindet sich so zentral über dem Objekt.
-        Ebenfalls wird das Messer um die z-Achse gedreht, da die Provisorische Halterung das Messer nicht perfekt
+        Ausrichtung des Messers. Das Messer wird nach vorne gekippt, da die Klinge gebogen ist und sonst nicht buendig
+        mit dem Schneidebrett abschliessen wuerde. Der tiefste Punkt der Klinge befindet sich so zentral ueber dem Objekt.
+        Ebenfalls wird das Messer um die z-Achse gedreht, da die provisorische Halterung das Messer nicht perfekt
         ausgerichtet aufnimmt. Diese Werte sind bei Verwendung von anderem Messer und Halterung anzupassen.
         """
         q = quaternion_from_euler(0, -0.15, 0.02, 'ryxz')
         test123.relative_goal([0, 0, 0], q)
+        test123.move_tip_in_amp(-0.01, 0, 0)
+
 
     # Weitere Bewegungen des Endeffektors, die nicht beruecksichtigt wurden.
 
@@ -259,7 +278,7 @@ class MoveArm(object):
 
     def master_cut(self):
         """
-        Funktion für die Planung und Ausfuehrung des Schnitte
+        Funktion fuer die Planung und Ausfuehrung des Schnitte
         :return:
         """
 
@@ -268,10 +287,10 @@ class MoveArm(object):
 
         # Solange dieser Abstand positiv ist, also sich das Messer oberhalb des Schneidbretts befindet, wird geschnitten.
         while d2t > 0:
-            # Aufruf der Funktion, die die Bewegung unter Berücksichtig verschiedener Paramenter berechnet und zurueckgibt.
+            # Aufruf der Funktion, die die Bewegung unter Beruecksichtig verschiedener Paramenter berechnet und zurueckgibt.
             down, side, final = test123.calc_move()
 
-            # Bewegung, wenn der gemessene F/T Wert den Schwellwert nicht überschritten hat. In diesem Fall erfolgt die
+            # Bewegung, wenn der gemessene F/T Wert den Schwellwert nicht ueberschritten hat. In diesem Fall erfolgt die
             # Bewegung rein entlang der z-Achse.
             if side == 0:
                 test123.move_tip_in_amp(0, 0, -down)
@@ -287,13 +306,15 @@ class MoveArm(object):
 
         # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
         # wird die Funktion beendet. Der Schnittvorgang wird mit Bewegungen entlag der x-Achse abgeschlossen,
-        # um sicherzustellen, dass das Objekt in Gaenze durchtrennt wird. Abschließend fährt das Messer seitlich
-        # entlang der y-Achse um das abgetrennte Stück zu separieren.
+        # um sicherzustellen, dass das Objekt in Gaenze durchtrennt wird. Abschliessend faehrt das Messer seitlich
+        # entlang der y-Achse um das abgetrennte Stueck zu separieren.
             if final == True:
-                test123.move_tip_in_amp(-self.blade_len/2, 0, 0)
-                test123.move_tip_in_amp(self.blade_len, 0, 0)
-                test123.move_tip_in_amp(-self.blade_len/2, 0, 0.01)
+                print ("Final")
+                test123.move_tip_in_amp(-self.blade_len, 0, 0)
+                test123.move_tip_in_amp(self.blade_len*1.5, 0, 0)
+                test123.move_tip_in_amp(-self.blade_len/2, 0, 0.005)
                 test123.move_tip_in_amp(0, 0.05, 0)
+                print ("Cut Finished")
                 return
 
 
@@ -310,6 +331,7 @@ class MoveArm(object):
 
         # Abfrage des maximalen F/T-Werts aus der letzten Bewegung
         cur_ft = test123.max_ft()
+        # cur_ft = self.ft_threshold
 
         # Abfrage des aktuellen Abstands von Klingenunterseite zu Schneidebrett
         d2t = test123.distance2table()
@@ -332,7 +354,7 @@ class MoveArm(object):
             # Je hoeher der gemessene Kraftwert, desto geringer die Schnitttiefe.
             # Die maximale berechnete Schnitttiefe entspricht der Standardschnitttiefe,
             # wenn die Kraft dem Schwellwert entspricht.
-            down = (1-(cur_ft)/self.ft_limit)*(self.step_down)
+            down = (self.ft_threshold/cur_ft)*(self.step_down)
 
             # Setzen einer Mindestschnitttiefe
             if down < 0.001:
@@ -355,8 +377,8 @@ class MoveArm(object):
 
     def max_ft(self):
         """
-        Funktion um den maximalen F/T waehrend der vergangenen Bewegung auszulesen und zurückzugeben.
-        :return: Maximale Kraft während der letzten Bewegung
+        Funktion um den maximalen F/T waehrend der vergangenen Bewegung auszulesen und zurueckzugeben.
+        :return: Maximale Kraft waehrend der letzten Bewegung
         """
         # Abfrage des max. F/T aus der Liste der F/T Werte
         ft_max = max(self.ft_list)
@@ -380,6 +402,6 @@ if __name__ == '__main__':
     test123.move_tip_in_amp(0, 0,-0.03) # Positionierung ueber Schnittobjekt
     test123.master_cut()# Aufruf der Schnittbewegung
     test123.go_to_home()  # Aufruf der Ausgangs-Pose
-
+    print ("Done")
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
