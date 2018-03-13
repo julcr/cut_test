@@ -179,7 +179,7 @@ class MoveArm(object):
         p.pose.position.y += y
         p.pose.position.z += z
         p.pose.orientation = trans.transform.rotation
-        test123.send_cart_goal(p)
+        cut.send_cart_goal(p)
 
     def distance2table(self):
         """
@@ -221,8 +221,8 @@ class MoveArm(object):
         ausgerichtet aufnimmt. Diese Werte sind bei Verwendung von anderem Messer und Halterung anzupassen.
         """
         q = quaternion_from_euler(0, -0.15, 0.02, 'ryxz')
-        test123.relative_goal([0, 0, 0], q)
-        test123.move_tip_in_amp(-0.01, 0, 0)
+        cut.relative_goal([0, 0, 0], q)
+        cut.move_tip_in_amp(-0.01, 0, 0)
 
 
     # Weitere Bewegungen des Endeffektors, die nicht beruecksichtigt wurden.
@@ -283,26 +283,26 @@ class MoveArm(object):
         """
 
         # Abfrage des aktuellen Abstands von Klinge zu Schneidebrett.
-        d2t = test123.distance2table()
+        d2t = cut.distance2table()
 
         # Solange dieser Abstand positiv ist, also sich das Messer oberhalb des Schneidbretts befindet, wird geschnitten.
         while d2t > 0:
             # Aufruf der Funktion, die die Bewegung unter Beruecksichtig verschiedener Paramenter berechnet und zurueckgibt.
-            down, side, final = test123.calc_move()
+            down, side, final = cut.calc_move()
 
             # Bewegung, wenn der gemessene F/T Wert den Schwellwert nicht ueberschritten hat. In diesem Fall erfolgt die
             # Bewegung rein entlang der z-Achse.
             if side == 0:
-                test123.move_tip_in_amp(0, 0, -down)
+                cut.move_tip_in_amp(0, 0, -down)
 
             # Wenn F/T-Wert den Grenzwert ueberschreitet, kommt eine Bewegung in x Richtung dazu.
             # Dabei wird zunaechst die Klinge ohne Bewegung zurueck gefahren, um von der vollen Klingenlaenge
             # zu profitieren. Anschliessend erfolgt eine diagonale Schnittbewegung ueber die gesamte Klingenlaenge.
             # Abschliessend eine weitere diagonale Bewegung, um wieder in die Ausgangsposition (x-Achse) zu gelangen.
             else:
-                test123.move_tip_in_amp(-side, 0, -(1/4) * down)
-                test123.move_tip_in_amp(2 * side, 0, -(2 / 4) * down)
-                test123.move_tip_in_amp(-side, 0, -(1 / 4) * down)
+                cut.move_tip_in_amp(-side, 0, -(1 / 4) * down)
+                cut.move_tip_in_amp(2 * side, 0, -(2 / 4) * down)
+                cut.move_tip_in_amp(-side, 0, -(1 / 4) * down)
 
         # Wenn die letze Bewegung ausgefuehrte wurde (also Final == True von calc_move() zurueckgegeben wird),
         # wird die Funktion beendet. Der Schnittvorgang wird mit Bewegungen entlag der x-Achse abgeschlossen,
@@ -310,10 +310,10 @@ class MoveArm(object):
         # entlang der y-Achse um das abgetrennte Stueck zu separieren.
             if final == True:
                 print ("Final")
-                test123.move_tip_in_amp(-self.blade_len, 0, 0)
-                test123.move_tip_in_amp(self.blade_len*1.5, 0, 0)
-                test123.move_tip_in_amp(-self.blade_len/2, 0, 0.005)
-                test123.move_tip_in_amp(0, 0.05, 0)
+                cut.move_tip_in_amp(-self.blade_len, 0, 0)
+                cut.move_tip_in_amp(self.blade_len * 1.5, 0, 0)
+                cut.move_tip_in_amp(-self.blade_len / 2, 0, 0.005)
+                cut.move_tip_in_amp(0, 0.05, 0)
                 print ("Cut Finished")
                 return
 
@@ -330,11 +330,11 @@ class MoveArm(object):
         final = False
 
         # Abfrage des maximalen F/T-Werts aus der letzten Bewegung
-        cur_ft = test123.max_ft()
+        cur_ft = cut.max_ft()
         # cur_ft = self.ft_threshold
 
         # Abfrage des aktuellen Abstands von Klingenunterseite zu Schneidebrett
-        d2t = test123.distance2table()
+        d2t = cut.distance2table()
         print("Distance to Table %s" % d2t)
         print("Current FT %s" %cur_ft)
 
@@ -395,13 +395,13 @@ if __name__ == '__main__':
     rospy.init_node('move_group_python_interface_test',
                     anonymous=True)
 
-    test123 = MoveArm()
+    cut = MoveArm()
 
-    test123.go_to_home() # Aufruf der Ausgangs-Pose
-    test123.align() # Ausrichtung der Klinge
-    test123.move_tip_in_amp(0, 0,-0.03) # Positionierung ueber Schnittobjekt
-    test123.master_cut()# Aufruf der Schnittbewegung
-    test123.go_to_home()  # Aufruf der Ausgangs-Pose
+    cut.go_to_home() # Aufruf der Ausgangs-Pose
+    cut.align() # Ausrichtung der Klinge
+    cut.move_tip_in_amp(0, 0, -0.03) # Positionierung ueber Schnittobjekt
+    cut.master_cut()# Aufruf der Schnittbewegung
+    cut.go_to_home()  # Aufruf der Ausgangs-Pose
     print ("Done")
     # spin() simply keeps python from exiting until this node is stopped
     rospy.spin()
