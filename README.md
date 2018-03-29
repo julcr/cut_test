@@ -1,3 +1,3 @@
-# cut_test
+# robo_cut
 
-This is a test edit
+Im Rahmen eines Masterprojektes wurde das Schneiden von Lebensmitteln durch Roboter untersucht werden.
