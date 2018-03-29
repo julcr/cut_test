@@ -1,0 +1,4 @@
+rosbag record /tf /tf_static /joint_states /kms40/wrench_zeroed /kms40/wrench /camera/camera_info /camera/image_raw/compressed /endeffector_position
+
+
+
